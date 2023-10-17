@@ -1,5 +1,5 @@
 """
-Decorator to implement caching of data
+Decorator factory to implement caching of data
 """
 import functools
 import hashlib
@@ -128,7 +128,7 @@ def cache(
             result = fn(*arg, **kwargs)
             ellapse = time.time() - start
 
-            # if should_cached functio is provided
+            # if should_cached function is provided
             if should_cache is not None and not should_cache(result, *arg, **kwargs):
                 return result
 
