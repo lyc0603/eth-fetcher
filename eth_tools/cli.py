@@ -5,7 +5,8 @@ CLI for eth_tools
 import os
 from argparse import ArgumentParser
 
-from eth_tools import commands, constants
+from eth_tools import commands
+from eth_tools import constants
 from eth_tools.contract_caller import DEFAULT_BLOCK_INTERVAL
 
 

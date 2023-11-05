@@ -32,6 +32,9 @@ class ContractCaller:
         block_interval=DEFAULT_BLOCK_INTERVAL,
         contract_args=None,
     ):
+        """
+        Function to use multithreading to collect results
+        """
         max_workers = multiprocessing.cpu_count() * 5
         if end_block is None:
             end_block = self.contract.web3.eth.blockNumber
@@ -64,10 +67,16 @@ class ContractCaller:
 
     @retry(delay=1, backoff=2, tries=3, logger=logger)
     def call_func(self, func_name, block, contract_args):
+        """
+        Method to call a function in a block
+        """
         func = getattr(self.contract.functions, func_name)
         return func(*contract_args).call(block_identifier=block)
 
     def transform_arg(self, raw_arg: str):
+        """
+        Method to transform an argument
+        """
         if not isinstance(raw_arg, str):
             return raw_arg
         args = raw_arg.split(":")

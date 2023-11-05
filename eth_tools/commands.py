@@ -129,3 +129,115 @@ def fetch_address_transactions(args: dict, etherscan_key: str):
             args["address"], internal=internal
         ):
             writer.writerow(transaction)
+
+
+@uses_web3
+def fetch_transactions(args: dict, web3: Web3):
+    """
+    Function to fetch transactions from an address
+    """
+    tx_hashes = []
+    for filename in args["files"]:
+        with smart_open(filename) as fin:
+            for tx in csv.DictReader(fin):
+                tx_hashes.append(tx["hash"])
+
+    tx_tracer = TransactionTracer(web3)
+    done = set()
+    with smart_open(args["output"], "w") as fout:
+        for i, tx_hash in enumerate(tx_hashes):
+            if i % 10 == 0:
+                logger.info("progress: %s/%s", i, len(tx_hashes))
+            if tx_hash in done:
+                continue
+            try:
+                tx = dict(web3.eth.getTransaction(tx_hash))
+                if args["include_receipt"]:
+                    tx["receipt"] = web3.eth.getTransactionReceipt(tx_hash)
+                if args["include_traces"]:
+                    tx["traces"] = tx_tracer.trace_transaction(tx_hash)
+                json.dump(tx, fout, cls=EthJSONEncoder)
+                print(file=fout)
+                done.add(tx_hash)
+            except Exception as ex:  # pylint: disable=broad-except
+                logger.warning("failed to trace %s: %s", tx_hash, ex)
+                continue
+
+
+@uses_web3
+def call_contract(args: dict, web3: Web3):
+    """
+    Function to call a contract
+    """
+    if args["abi"]:
+        with open(args["abi"]) as f:
+            abi = json.load(f)
+    else:
+        abi = abi_fetcher.fetch_abi(args["address"])
+    address: Address = web3.toChecksumAddress(args["address"])
+    contract = web3.eth.contract(abi=abi, address=address)
+    contract_caller = ContractCaller(contract)
+    with smart_open_with_stdout(args["output"], "w") as fout:
+        # print(args["args"])
+        results = contract_caller.collect_results(
+            args["func"],
+            start_block=args["start"],
+            end_block=args["end"],
+            block_interval=args["interval"],
+            contract_args=args["args"],
+        )
+        for block, result in results:
+            line = {"block": block, "result": result}
+            json.dump(line, fout, cls=EthJSONEncoder)
+            print(file=fout)
+
+
+@uses_web3
+def fetch_events(args: dict, web3: Web3):
+    """
+    Function to fetch events from a contract
+    """
+    fetcher = EventFetcher(web3)
+    task = FetchTask.from_dict(args)
+    fetcher.fetch_and_persist_events(task, args["output"])
+
+
+@uses_etherscan
+def fetch_abis(args: dict, etherscan_key: str):
+    """
+    Function to fetch ABIs from Etherscan
+    """
+    with open(args["input"]) as f:
+        contracts = json.load(f)
+    abis = abi_fetcher.fetch_abis(
+        [c["address"] for c in contracts], etherscan_api_key=etherscan_key
+    )
+    for contract, abi in zip(contracts, abis):
+        with open(path.join(args["output"], contract["abi"]), "w") as f:
+            json.dump(abi, f, indent=4)
+
+
+@uses_web3
+def bulk_fetch_events(args: dict, web3: Web3):
+    """
+    Function to fetch events from a contract
+    """
+    fetcher = EventFetcher(web3)
+    with smart_open(args["config"]) as f:
+        raw_tasks = json.load(f)
+    tasks = [FetchTask.from_dict(raw_task, args["abis"]) for raw_task in raw_tasks]
+    fetcher.fetch_all_events(tasks, args["output"])
+
+
+# convert a function to a context manager
+@contextmanager
+def smart_open_with_stdout(filename, mode="r", **kwargs) -> Iterator[IO]:
+    """
+    Function to create a IO[str] object from a URI.
+    """
+    if filename is None:
+        # sys.stdout is the standard output stream to print data
+        yield sys.stdout
+    else:
+        with smart_open(filename, mode, **kwargs) as f:
+            yield f
