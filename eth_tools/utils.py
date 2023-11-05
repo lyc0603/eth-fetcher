@@ -21,6 +21,8 @@ def smart_open(
     transport_params=None,
 ) -> IO[str]:
     """Returns a IO for the given URI"""
+
+    # cast is a function to cast a variable to a type
     return cast(
         # IO stream is the method to read and write data
         IO,
